@@ -1,6 +1,6 @@
 # Natural Language SQL REPL
 
-Ask your MySQL / MariaDB database questions in plain English. Powered by OpenAI.
+Ask your MySQL database questions in plain English. Powered by OpenAI.
 
 ---
 
