@@ -1,61 +1,161 @@
-# Natural Language SQL REPL
+# Project Report
 
-Ask your MySQL database questions in plain English. Powered by OpenAI.
+## Database purpose:
+manage an individual’s owned and desired items (personal inventory)
 
----
+## Schema:
+![ERD](/schema.png)
 
-## How it works
+## Working Flow:
 
-```
-  1. User asks a question
-  2. chatGPT generates SQL using your schema
-  3. MySQL runs the query
-  4. chatGPT explains the results as a plain English answer
-```
+**Q**: Who owns the most electronics items?
 
----
+**SQL**: 
+SELECT
+  p.id,
+  p.first_name,
+  p.last_name,
+  p.email,
+  COUNT(*) AS electronics_items_owned
+FROM person p
+JOIN person_item pi ON pi.person_id = p.id
+JOIN item i ON i.id = pi.item_id
+JOIN owned_item oi ON oi.item_id = i.id
+JOIN category c ON c.id = i.category_id
+WHERE c.title = 'Electronics'
+GROUP BY p.id, p.first_name, p.last_name, p.email
+ORDER BY electronics_items_owned DESC
+LIMIT 1;
 
-## Setup
+**A**: Emma Johnson (emma.johnson@example.com) owns the most electronics items, with **3** electronics items.
 
-### 1. Install dependencies
+## Non-Working Flow:
 
-```bash
-npm install
-```
+**Q**: What is the maximum number of owned items that could be grouped together that have a combined value less than 1000?
 
-### 2. Set your OpenAI API key
+**SQL**:
+SELECT COUNT(*) AS max_items
+FROM owned_item oi
+JOIN item i ON i.id = oi.item_id
+WHERE i.value > 0 AND i.value < 1000;
 
-```bash
-export OPENAI_API_KEY=sk-...
-```
+**A**: The maximum number of owned items that could be grouped together while keeping their combined value under 1000 is **17 items**.
 
-### 3. Configure your database
+## Additional Examples:
 
-Edit **`config.js`**:
+**Q**: What category of items has the most number of wanted items?
 
-```js
-model: 'gpt-5.2',
-dbConnectionString: 'mysql://root:password@localhost:3306/my_database',
-schemaSQLPath:  './schema.sql',   // your CREATE TABLE statements
-schemaImagePath: './schema.png',  // your ERD diagram (or null to skip)
-```
+**SQL**:
+SELECT
+  c.id,
+  c.title,
+  COUNT(*) AS wanted_items_count
+FROM wanted_item wi
+JOIN item i ON i.id = wi.item_id
+JOIN category c ON c.id = i.category_id
+GROUP BY c.id, c.title
+ORDER BY wanted_items_count DESC
+LIMIT 1;
 
-### 4. Add your schema
+**A**: The **Outdoors** category has the most wanted items, with **3** wanted items.
 
-**Option A — SQL file** (`schema.sql`):
-Replace the example file with your own `CREATE TABLE` statements.
+<hr></hr>
 
-**Option B — Schema image** (`schema.png`):
-Add your ERD diagram to the project.
+**Q**: Who wants a Nintendo Switch?
 
-**Using both** is recommended.
+**SQL**:
+SELECT
+  p.id,
+  p.first_name,
+  p.last_name,
+  p.email
+FROM person p
+JOIN person_item pi ON pi.person_id = p.id
+JOIN item i ON i.id = pi.item_id
+JOIN wanted_item wi ON wi.item_id = i.id
+WHERE i.title = 'Nintendo Switch'
+ORDER BY p.last_name, p.first_name, p.id;
 
----
+**A**: No one—there aren’t any people listed as wanting a **Nintendo Switch**.
 
-## Run
+<hr></hr>
 
-```bash
-npm start
-```
+**Q**: Which items are owned by multiple people?
 
----
+**SQL**:
+SELECT
+  i.id AS item_id,
+  i.title AS item_title,
+  i.value,
+  c.title AS category_title,
+  COUNT(DISTINCT pi.person_id) AS owners_count
+FROM item i
+JOIN owned_item oi ON oi.item_id = i.id
+JOIN person_item pi ON pi.item_id = i.id
+JOIN category c ON c.id = i.category_id
+GROUP BY i.id, i.title, i.value, c.title
+HAVING COUNT(DISTINCT pi.person_id) > 1
+ORDER BY owners_count DESC, i.title ASC;
+
+**A**: The items owned by multiple people are:
+
+- **iPhone 14 Pro** (Electronics) — **2** owners  
+- **Nintendo Switch** (Gaming) — **2** owners
+
+<hr></hr>
+
+**Q**: What is the ratio of owned items to wanted items?
+
+**SQL**:
+SELECT
+  COALESCE(owned.cnt, 0) / NULLIF(COALESCE(wanted.cnt, 0), 0) AS owned_to_wanted_ratio
+FROM
+  (SELECT COUNT(*) AS cnt FROM owned_item) AS owned
+CROSS JOIN
+  (SELECT COUNT(*) AS cnt FROM wanted_item) AS wanted;
+  
+**A**: The ratio of owned items to wanted items is **1.5**, meaning there are **about 1.5 owned items for every 1 wanted item**.
+
+<hr></hr>
+
+**Q**: Who owns the most items in excellent condition?
+
+**SQL**:
+SELECT
+  p.id,
+  p.first_name,
+  p.last_name,
+  p.email,
+  COUNT(*) AS excellent_items_owned
+FROM person p
+JOIN person_item pi ON pi.person_id = p.id
+JOIN owned_item oi ON oi.item_id = pi.item_id
+WHERE oi.`condition` = 'Excellent'
+GROUP BY p.id, p.first_name, p.last_name, p.email
+ORDER BY excellent_items_owned DESC
+LIMIT 1;
+
+**A**: Emma Johnson (emma.johnson@example.com) owns the most items in excellent condition, with **2** such items.
+
+<hr></hr>
+
+**Q**: What is the oldest owned item in Excellent condition, and when was it obtained?
+
+**SQL**:
+SELECT
+  i.id,
+  i.title,
+  oi.date_obtained
+FROM owned_item oi
+JOIN item i ON i.id = oi.item_id
+WHERE oi.`condition` = 'Excellent'
+ORDER BY oi.date_obtained ASC, i.id ASC
+LIMIT 1;
+
+**A**: The oldest owned item in **Excellent** condition is the **Kindle Paperwhite**, obtained on **March 18, 2023**.
+
+## Prompting Strategies:
+
+**Zero-shot**: performed decently well, with only a few questions resulting in poor responses
+
+**In-domain one-shot**: performed very well, with no poor responses to this point in testing
